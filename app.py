@@ -162,114 +162,74 @@ else:
 # 2. ĐÁNH GIÁ HIỆU QUẢ MÔ HÌNH AI
 # ==========================================
 st.divider()
+
 st.subheader("5. Đánh giá hiệu quả mô hình AI")
-st.caption(
-    "Đánh giá dựa trên tập bình luận có nhãn thực tế do con người xác định độc lập."
+
+st.write(
+    "Đánh giá dựa trên tập bình luận có nhãn thực tế "
+    "do con người xác định độc lập."
 )
 
-if os.path.exists(EVAL_PATH):
-    try:
-        eval_df = pd.read_csv(EVAL_PATH)
+import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix
+)
 
-        required_eval = ["sentiment", "true_sentiment"]
-        if not all(col in eval_df.columns for col in required_eval):
-            st.error(
-                "File đánh giá cần có hai cột: sentiment và true_sentiment."
+evaluation_file = st.file_uploader(
+    "Tải file customer_reviews_labeled.csv",
+    type=["csv"],
+    key="evaluation_file"
+)
+
+if evaluation_file is not None:
+    eval_df = pd.read_csv(evaluation_file)
+
+    required_columns = ["sentiment", "true_sentiment"]
+
+    if all(col in eval_df.columns for col in required_columns):
+        y_pred = eval_df["sentiment"].astype(str).str.strip()
+        y_true = eval_df["true_sentiment"].astype(str).str.strip()
+
+        valid = y_true.notna() & y_pred.notna()
+        y_true = y_true[valid]
+        y_pred = y_pred[valid]
+
+        if len(y_true) > 0:
+            st.metric(
+                "Accuracy",
+                f"{accuracy_score(y_true, y_pred):.1%}"
+            )
+
+            st.write("### Báo cáo phân loại")
+            report = classification_report(
+                y_true,
+                y_pred,
+                output_dict=True,
+                zero_division=0
+            )
+            st.dataframe(pd.DataFrame(report).transpose())
+
+            st.write("### Ma trận nhầm lẫn")
+            labels = sorted(set(y_true) | set(y_pred))
+            matrix = confusion_matrix(
+                y_true,
+                y_pred,
+                labels=labels
+            )
+            st.dataframe(
+                pd.DataFrame(
+                    matrix,
+                    index=[f"Thực tế: {x}" for x in labels],
+                    columns=[f"Dự đoán: {x}" for x in labels]
+                )
             )
         else:
-            eval_df = eval_df.dropna(
-                subset=["sentiment", "true_sentiment"]
-            ).copy()
-
-            y_pred = eval_df["sentiment"].astype(str).str.strip()
-            y_true = eval_df["true_sentiment"].astype(str).str.strip()
-
-            if len(eval_df) == 0:
-                st.warning("File đánh giá chưa có dữ liệu hợp lệ.")
-            else:
-                accuracy = accuracy_score(y_true, y_pred)
-
-                m1, m2 = st.columns(2)
-                m1.metric("Số bình luận đánh giá", f"{len(eval_df):,}")
-                m2.metric("Accuracy", f"{accuracy:.1%}")
-
-                st.markdown("**Báo cáo phân loại**")
-                report = classification_report(
-                    y_true,
-                    y_pred,
-                    output_dict=True,
-                    zero_division=0
-                )
-
-                report_df = pd.DataFrame(report).transpose()
-                report_df.index.name = "Nhãn"
-                report_df = report_df.reset_index()
-
-                st.dataframe(
-                    report_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-                st.markdown("**Ma trận nhầm lẫn**")
-                labels = ["Negative", "Neutral", "Positive"]
-                labels = [
-                    label for label in labels
-                    if label in set(y_true) | set(y_pred)
-                ]
-
-                cm = confusion_matrix(
-                    y_true,
-                    y_pred,
-                    labels=labels
-                )
-
-                cm_df = pd.DataFrame(
-                    cm,
-                    index=[f"Thực tế: {x}" for x in labels],
-                    columns=[f"AI dự đoán: {x}" for x in labels]
-                )
-
-                st.dataframe(
-                    cm_df,
-                    use_container_width=True
-                )
-
-                wrong = eval_df[y_true != y_pred]
-                st.markdown(
-                    f"**Số bình luận dự đoán sai: {len(wrong)}**"
-                )
-
-                if len(wrong) > 0:
-                    display_cols = [
-                        col for col in [
-                            "review_no", "review",
-                            "true_sentiment", "sentiment"
-                        ]
-                        if col in wrong.columns
-                    ]
-                    st.dataframe(
-                        wrong[display_cols],
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                else:
-                    st.success(
-                        "Mô hình không dự đoán sai bình luận nào trong tập đánh giá."
-                    )
-
-    except Exception as e:
-        st.error(f"Lỗi khi đọc hoặc đánh giá dữ liệu: {e}")
-
+            st.warning("File chưa có dữ liệu đánh giá hợp lệ.")
+    else:
+        st.error(
+            "File cần có hai cột sentiment và true_sentiment."
+        )
 else:
-    st.info(
-        "Chưa có file customer_reviews_labeled.csv tại "
-        "/content/customer_reviews_labeled.csv. "
-        "Phần đánh giá sẽ xuất hiện khi bạn lưu file này vào đúng đường dẫn."
-    )
-
-st.caption(
-    "Lưu ý: kết quả đánh giá chỉ đại diện cho tập dữ liệu có nhãn thực tế. "
-    "Chủ đề hiện được phân loại bằng từ khóa nên có thể chưa chính xác với mọi bình luận."
-)
-
+    st.info("Hãy tải file customer_reviews_labeled.csv để xem kết quả đánh giá.")
